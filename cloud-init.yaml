@@ -1,0 +1,101 @@
+#cloud-config
+# vim: syntax=yaml
+
+# Set the host-level DNS server
+manage_resolv_conf: true
+
+resolv_conf:
+  nameservers: ['1.1.1.1', '1.0.0.1']
+
+# You could modify this for your own user information
+users:
+  - name: worker
+    gecos: "Raspberry Pi"
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: users,video,input
+    lock_passwd: false
+    ssh_pwauth: false
+    ssh_authorized_keys:
+    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJqWPqaeAUKokSWYjzi35zJLWMrQaO8uX3izA/8LcdZ9 jaredallard@naofumi.local
+
+# Set the locale of the system
+locale: "en_US.UTF-8"
+
+# Set the timezone
+timezone: "America/Los_Angeles"
+
+# Update apt packages on first boot
+package_update: true
+package_upgrade: false
+package_reboot_if_required: true
+
+# Install any additional apt packages you need here
+packages:
+- ntp
+# Containers. Need I say more?
+- docker.io
+# VPN (soon to be automated, also need these packages or it dies)
+- wireguard
+- resolvconf
+- ifupdown
+# Get more entropy
+- haveged
+# Bye bye hackers.
+- fail2ban
+# For DNS at home
+- avahi-daemon
+# Nice stuff
+- neovim
+
+write_files:
+- content: |
+    [sshd]
+    action = ufw[application="OpenSSH", blocktype=reject]
+  path: /etc/fail2ban/jail.d/ufw-ssh.conf
+- content: |
+    NODE_IP=$(ip addr | grep "inet" | grep wg0 | awk '{ print $2 }' | awk -F '/' '{ print $1 }')
+
+    if [[ ! -e "/boot/firmware/token" ]]; then
+      echo "no rancher token, skipping joining k8s cluster"
+      exit 0
+    fi
+
+    echo "joining kubernetes cluster"
+    docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes \
+      -v /var/run:/var/run rancher/rancher-agent:v2.4.2 --server https://rancher.tritonjs.com \
+      --token "$(cat /boot/firmware/token)" \
+      --ca-checksum "$(cat /boot/firmware/ca-checksum)" \
+      --worker
+
+# These commands will be ran once on first boot only
+runcmd:
+  # Generate a hostname
+  - 'uuidgen | awk -F - "{ print \$1\$2\$3 }" | tee /etc/hostname'
+  - [sh, -c, 'echo "127.0.0.1 $(cat /etc/hostname) $(cat /etc/hostname).local" >> /etc/hosts']
+
+  # Pickup the hostname changes
+  - 'systemctl restart --no-block avahi-daemon'
+
+  # Add the correct group to worker
+  - 'usermod -aG docker worker'
+
+  # systemd
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, --no-block, docker.service]
+  # Just in case....
+  - [systemctl, enable, --now, --no-block, avahi-daemon.service]
+  - [systemctl, enable, --now, --no-block, haveged.service]
+  - [systemctl, enable, --now, --no-block, fail2ban.service]
+  
+
+  # enable ufw
+  - [ufw, allow, ssh]
+  - [ufw, allow, from, 10.10.0.0/32]
+  - [ufw, --force, enable]
+
+  # remove the ubuntu user
+  - [sh, -c, 'userdel ubuntu || exit 0']
+  - [sh, -c, 'userdel pi || exit 0']
+
+  # join the Kubernetes Service
