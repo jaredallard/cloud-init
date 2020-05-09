@@ -32,6 +32,8 @@ package_reboot_if_required: true
 
 # Install any additional apt packages you need here
 packages:
+# Essentials
+- dphys-swapfile
 - ntp
 # Containers. Need I say more?
 - docker.io
@@ -54,22 +56,20 @@ write_files:
     action = ufw[application="OpenSSH", blocktype=reject]
   path: /etc/fail2ban/jail.d/ufw-ssh.conf
 - content: |
-    NODE_IP=$(ip addr | grep "inet" | grep wg0 | awk '{ print $2 }' | awk -F '/' '{ print $1 }')
+    LABEL=writable          /               ext4    defaults,noatime       0 0
+    LABEL=system-boot       /boot/firmware  vfat    defaults               0 1
 
-    if [[ ! -e "/boot/firmware/token" ]]; then
-      echo "no rancher token, skipping joining k8s cluster"
-      exit 0
-    fi
-
-    echo "joining kubernetes cluster"
-    docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes \
-      -v /var/run:/var/run rancher/rancher-agent:v2.4.2 --server https://rancher.tritonjs.com \
-      --token "$(cat /boot/firmware/token)" \
-      --ca-checksum "$(cat /boot/firmware/ca-checksum)" \
-      --worker
+    # We can mount these dirs as tmpfs to save the life of our flash storage
+    tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
+    tmpfs /var/tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
+    tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755 0 0
+  path: /etc/fstab
 
 # These commands will be ran once on first boot only
 runcmd:
+  # Remove packages
+  - apt-get autoremove snapd
+
   # Generate a hostname
   - 'uuidgen | awk -F - "{ print \$1\$2\$3 }" | tee /etc/hostname'
   - [sh, -c, 'echo "127.0.0.1 $(cat /etc/hostname) $(cat /etc/hostname).local" >> /etc/hosts']
@@ -87,15 +87,20 @@ runcmd:
   - [systemctl, enable, --now, --no-block, avahi-daemon.service]
   - [systemctl, enable, --now, --no-block, haveged.service]
   - [systemctl, enable, --now, --no-block, fail2ban.service]
+  - [systemctl, enable, --now, --no-block, dphys-swapfile.service]
   
-
   # enable ufw
-  - [ufw, allow, ssh]
-  - [ufw, allow, from, 10.10.0.0/32]
-  - [ufw, --force, enable]
+  # disabled until I figure out wtf is wrong with the rules
+  # - [ufw, allow, ssh]
+  # - [ufw, allow, from, 10.10.0.0/32]
+  # - [ufw, --force, enable]
 
-  # remove the ubuntu user
+  # remove the ubuntu user(s), just in case
   - [sh, -c, 'userdel ubuntu || exit 0']
   - [sh, -c, 'userdel pi || exit 0']
 
-  # join the Kubernetes Service
+  # modify the kernel commandline to support Kubernetes
+  - [sh, -c, 'echo "net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline cgroup_enable=cpuset cgroup_enable=memory rootwait fixrtc" >/boot/firmware/cmdline.txt']
+
+  # reboot
+  - reboot
