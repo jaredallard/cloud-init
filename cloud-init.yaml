@@ -5,25 +5,32 @@
 manage_resolv_conf: true
 
 resolv_conf:
-  nameservers: ['1.1.1.1', '1.0.0.1']
+  nameservers: ["192.168.0.115"]
+
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp6: true
 
 # You could modify this for your own user information
 users:
   - name: worker
-    gecos: "Raspberry Pi"
+    gecos: "worker"
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     groups: users,video,input
     lock_passwd: false
     ssh_pwauth: false
     ssh_authorized_keys:
-    - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJqWPqaeAUKokSWYjzi35zJLWMrQaO8uX3izA/8LcdZ9 jaredallard@naofumi.local
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJqWPqaeAUKokSWYjzi35zJLWMrQaO8uX3izA/8LcdZ9 jaredallard@naofumi.local
 
 # Set the locale of the system
 locale: "en_US.UTF-8"
 
 # Set the timezone
-timezone: "America/Los_Angeles"
+timezone: "UTC"
 
 # Update apt packages on first boot
 package_update: true
@@ -32,63 +39,111 @@ package_reboot_if_required: true
 
 # Install any additional apt packages you need here
 packages:
-# Essentials
-- dphys-swapfile
-- ntp
-# Containers. Need I say more?
-- docker.io
-# VPN (soon to be automated, also need these packages or it dies)
-- wireguard
-- resolvconf
-- ifupdown
-# Get more entropy
-- haveged
-# Bye bye hackers.
-- fail2ban
-# For DNS at home
-- avahi-daemon
-# Nice stuff
-- neovim
+  # Time
+  - fake-hwclock
+  # VPN (soon to be automated, also need these packages or it dies)
+  - wireguard
+  - resolvconf
+  - ifupdown
+  # Containers? Need I say more?
+  - docker.io
+  # Get more entropy
+  - haveged
+  # Bye bye hackers.
+  - fail2ban
+  # For DNS at home
+  - avahi-daemon
+  # Nice stuff
+  - neovim
 
 write_files:
-- content: |
-    [sshd]
-    action = ufw[application="OpenSSH", blocktype=reject]
-  path: /etc/fail2ban/jail.d/ufw-ssh.conf
-- content: |
-    LABEL=writable          /               ext4    defaults,noatime       0 0
-    LABEL=system-boot       /boot/firmware  vfat    defaults               0 1
+  - content: |-
+      [sshd]
+      action = ufw[application="OpenSSH", blocktype=reject]
+    path: /etc/fail2ban/jail.d/ufw-ssh.conf
+  - content: |-
+      LABEL=writable          /               ext4    defaults,noatime       0 0
+      LABEL=system-boot       /boot/firmware  vfat    defaults               0 1
 
-    # We can mount these dirs as tmpfs to save the life of our flash storage
-    tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
-    tmpfs /var/tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
-    tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755 0 0
-  path: /etc/fstab
+      # We can mount these dirs as tmpfs to save the life of our flash storage
+      tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
+      tmpfs /var/tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
+      tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755 0 0
+    path: /etc/fstab
+  - content: |-
+      #!/usr/bin/env bash
+      set -e
+
+      mkdir -p /etc/registrar
+
+      if [[ ! -e "/etc/registrard/config" ]]; then
+        LEADER_MODE=false
+        if [[ -e "/boot/firmware/registrar/leader" ]]; then
+          LEADER_MODE=true
+        fi
+
+        if [[ ! -e "/boot/firmware/registrar" ]]; then
+          echo "Error: Missing registrard configuration folder at /boot/firmware, won't be able to run registrard"
+          exit 1
+        fi
+
+        token=""
+        if [[ -e "/boot/firmware/registrar/token" ]]; then
+          token=$(cat /boot/firmware/registrar/token)
+        fi
+
+        cat > /etc/registrar/config <<EOF
+      REGISTRARD_ENABLE_TLS=true
+      LEADER_MODE=${LEADER_MODE}
+      REGISTRARD_HOST=registrar.tritonjs.com:8000
+      REGISTRARD_TOKEN=${token}
+      EOF
+      fi
+
+      echo "starting registrar"
+      docker run -v /:/host --env-file /etc/registrar/config --restart=on-failure --name registrar jaredallardhome/registrar registrar
+
+      # TODO(jaredallard): control this in the container one day
+      # They will start on reboot
+      systemctl enable k3s || true
+      systemctl enable k3s-agent || true
+    path: /usr/local/bin/initialize-node
 
 # These commands will be ran once on first boot only
 runcmd:
   # Remove packages
-  - apt-get autoremove snapd
+  - apt-get autoremove -y snapd
+
+  # Configure ntp
+  - timedatectl set-ntp true
 
   # Generate a hostname
   - 'uuidgen | awk -F - "{ print \$1\$2\$3 }" | tee /etc/hostname'
-  - [sh, -c, 'echo "127.0.0.1 $(cat /etc/hostname) $(cat /etc/hostname).local" >> /etc/hosts']
+  - [
+      sh,
+      -c,
+      'echo "127.0.0.1 $(cat /etc/hostname) $(cat /etc/hostname).local" >> /etc/hosts',
+    ]
 
   # Pickup the hostname changes
-  - 'systemctl restart --no-block avahi-daemon'
+  - "systemctl restart --no-block avahi-daemon"
 
   # Add the correct group to worker
-  - 'usermod -aG docker worker'
+  - "usermod -aG docker worker"
 
   # systemd
   - [systemctl, daemon-reload]
-  - [systemctl, enable, --now, --no-block, docker.service]
-  # Just in case....
-  - [systemctl, enable, --now, --no-block, avahi-daemon.service]
-  - [systemctl, enable, --now, --no-block, haveged.service]
-  - [systemctl, enable, --now, --no-block, fail2ban.service]
-  - [systemctl, enable, --now, --no-block, dphys-swapfile.service]
-  
+  - [
+      systemctl,
+      enable,
+      --now,
+      --no-block,
+      docker.service,
+      avahi-daemon.service,
+      haveged.service,
+      fail2ban.service,
+      fake-hwclock.service,
+    ]
   # enable ufw
   # disabled until I figure out wtf is wrong with the rules
   # - [ufw, allow, ssh]
@@ -96,11 +151,18 @@ runcmd:
   # - [ufw, --force, enable]
 
   # remove the ubuntu user(s), just in case
-  - [sh, -c, 'userdel ubuntu || exit 0']
-  - [sh, -c, 'userdel pi || exit 0']
+  - [sh, -c, "userdel ubuntu || exit 0"]
+  - [sh, -c, "userdel pi || exit 0"]
 
   # modify the kernel commandline to support Kubernetes
-  - [sh, -c, 'echo "net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline cgroup_enable=cpuset cgroup_enable=memory rootwait fixrtc" >/boot/firmware/cmdline.txt']
+  - [
+      sh,
+      -c,
+      'echo "net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline cgroup_enable=cpuset cgroup_enable=memory rootwait fixrtc" >/boot/firmware/cmdline.txt',
+    ]
+
+  # Setup K3s and all of that
+  - bash /usr/local/bin/initialize-node
 
   # reboot
   - reboot
