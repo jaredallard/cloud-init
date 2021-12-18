@@ -24,7 +24,7 @@ users:
     lock_passwd: false
     ssh_pwauth: false
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC1C1WPGETJEVuIs9rdPONt0hTr9RrVdtZYDc0Zu/egd jaredallard@hachiman.local
+      - ssh-ed448 AAAACXNzaC1lZDQ0OAAAADkSkjp8Cu0UwZxyWBa7QLSUl5Vz6ARlFRIHlxM5MS9YR1HeTuwmJdK6rXExHh+zXB9ZWgjf8zO8TAA= id_rgst 12/18/2021
 
 # Set the locale of the system
 locale: "en_US.UTF-8"
