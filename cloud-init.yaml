@@ -105,6 +105,8 @@ runcmd:
   - "ufw default allow outgoing"
   # Allow all traffic over tailscale
   - "ufw allow in on tailscale0 to any"
+  # Enable ufw
+  - "ufw enable"
 
   # modify the kernel command line to support Kubernetes
   - [

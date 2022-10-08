@@ -46,15 +46,15 @@ if [[ ! -e "$DOWNLOAD_FILE_NAME" ]]; then
   echo # newlines because aria2c (buggily?) doesn't print one
 fi
 
-info "Checking validity of image download ..."
-curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
-curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
-gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
-gpg --verify SHA256SUMS.gpg SHA256SUMS
-grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
-success "Image is valid"
-
 if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
+  info "Checking validity of image download ..."
+  curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
+  curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
+  gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+  gpg --verify SHA256SUMS.gpg SHA256SUMS
+  grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
+  success "Image is valid"
+
   info "Decompressing image ..."
   pv "$DOWNLOAD_FILE_NAME" | xz -d -T "$(nproc)" --stdout >"$UNCOMPRESSED_FILE_NAME"
   success "Decompressed image successfully"
@@ -75,7 +75,7 @@ sudo true
 
 DISK=${DISK:-""}
 if [[ -z "$DISK" ]]; then
-  DISK="$(diskutil list | grep -v "disk0" | grep -A6 "(internal, physical)" | head -n1 | awk '{ print $1 }' | sed 's_/dev/__')"
+  DISK="$(diskutil list | grep -v "disk0" | grep "physical" | head -n1 | awk '{ print $1 }' | sed 's_/dev/__')"
   if [[ -z "$DISK" ]]; then
     error "Failed to find a disk, supply it with the DISK environment variable"
     exit 1
