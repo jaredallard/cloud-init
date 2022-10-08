@@ -5,7 +5,7 @@
 manage_resolv_conf: true
 
 resolv_conf:
-  nameservers: ["192.168.1.185"]
+  nameservers: ["192.168.1.17"]
 
 network:
   version: 2
