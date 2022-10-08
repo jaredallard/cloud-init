@@ -59,10 +59,9 @@ write_files:
   - content: |-
       LABEL=writable          /               ext4    defaults,noatime       0 0
       LABEL=system-boot       /boot/firmware  vfat    defaults               0 1
-
       # We can mount these dirs as tmpfs to save the life of our flash storage
-      tmpfs /tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
-      tmpfs /var/tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=100M 0 0
+      tmpfs /tmp tmpfs defaults,noatime,mode=1777,size=100M 0 0
+      tmpfs /var/tmp tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755,size=500M 0 0
       tmpfs /var/log tmpfs defaults,noatime,nosuid,nodev,noexec,mode=0755 0 0
     path: /etc/fstab
 
@@ -74,15 +73,10 @@ runcmd:
   # Configure ntp
   - timedatectl set-ntp true
 
-  # Generate a hostname
-  - 'uuidgen | awk -F - "{ print \$1\$2\$3 }" | tee /etc/hostname'
+  # Generate a hostname, and start advertising it.
+  - 'hostnamectl set-hostname "$(uuidgen | awk -F - "{ print \$1\$2\$3 }")"'
   - 'echo "127.0.0.1 $(cat /etc/hostname) $(cat /etc/hostname).local" >> /etc/hosts'
-
-  # Pickup the hostname changes
   - "systemctl restart --no-block avahi-daemon"
-
-  # Add the correct group to worker
-  - "usermod -aG docker worker"
 
   # systemd
   - [systemctl, daemon-reload]
@@ -101,7 +95,18 @@ runcmd:
   - [sh, -c, "userdel ubuntu || exit 0"]
   - [sh, -c, "userdel pi || exit 0"]
 
-  # modify the kernel commandline to support Kubernetes
+  # Tailscale
+  - "curl -fsSL https://tailscale.com/install.sh | sh"
+  - "apt-get update; apt-get install tailscale; tailscale up --auth-key=${TAILSCALE_AUTH_KEY}"
+
+  # Configure uwf
+  # Default to deny all incoming traffic, allow all outgoing
+  - "ufw default deny incoming"
+  - "ufw default allow outgoing"
+  # Allow all traffic over tailscale
+  - "ufw allow in on tailscale0 to any"
+
+  # modify the kernel command line to support Kubernetes
   - [
       sh,
       -c,

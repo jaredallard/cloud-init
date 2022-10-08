@@ -1,35 +1,105 @@
 #!/usr/bin/env bash
 # Automatically provision a new node.
+set -e -o pipefail
 
-disk="$(diskutil list | grep 32.0 | awk '{ print $5 }')"
+UBUNTU_VERSION="22.04.1"
+# https://keyserver.ubuntu.com/pks/lookup?search=843938DF228D22F7B3742BC0D94AA3F0EFE21092&fingerprint=on&op=index
+GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
-echo "Going to flash '$disk' (r$disk) in 10s ..."
-sleep 10
+DOWNLOAD_BASE="https://cdimage.ubuntu.com/releases/${UBUNTU_VERSION}/release"
+DOWNLOAD_FILE_NAME="ubuntu-${UBUNTU_VERSION}-preinstalled-server-arm64+raspi.img.xz"
+DOWNLOAD_URL="${DOWNLOAD_BASE}/${DOWNLOAD_FILE_NAME}"
+UNCOMPRESSED_FILE_NAME="${DOWNLOAD_FILE_NAME%.*}"
 
-echo "Unmounting disk ..."
-sudo diskutil unmountDisk /dev/"$disk"
+out() {
+  color="${1:-"36"}"
+  prefix="${2:-">"}"
+  shift
+  echo -e " \033[${color}m${prefix}\033[0m\033[1m " "$@" "\033[0m"
+}
 
-echo "Starting write ..."
-pv ubuntu.img | sudo dd bs=1m of=/dev/r"$disk"
-sync
+info() {
+  out "" "" "$@"
+}
 
-echo "Setting up cloud-init ..."
-sudo diskutil mountDisk /dev/disk2
-cp cloud-init.yaml /Volumes/system-boot/user-data
+success() {
+  out 32 "" "$@"
+}
 
-mkdir -p /Volumes/system-boot/registrar
+error() {
+  out 31 "x" "$@"
+}
 
-echo -n "Should this be a server node? [Y/n]: "
-read -r prompt
-if [[ $prompt =~ ^(Y|y) ]]; then
-  echo "true" >/Volumes/system-boot/registrar/leader
-else
-  echo "Setting up agent"
-
-  token=$(kubectl get secret -n registrar registrard -ogo-template='{{ .data.REGISTRARD_TOKEN | base64decode }}')
-  echo "${token}" >/Volumes/system-boot/registrar/token
+if ! command -v aria2c >/dev/null; then
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    info "Installing 'pv' via Homebrew..."
+    brew install aria2
+  else
+    error "Please install pv"
+    exit 1
+  fi
 fi
 
-echo "Ejecting disk ..."
+if [[ ! -e "$DOWNLOAD_FILE_NAME" ]]; then
+  info "Downloading Ubuntu ${UBUNTU_VERSION}... (URL: ${DOWNLOAD_URL})"
+  aria2c --console-log-level=error --download-result=hide --file-allocation=none -x 4 "$DOWNLOAD_URL"
+  echo # newlines because aria2c (buggily?) doesn't print one
+fi
+
+info "Checking validity of image download ..."
+curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
+curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
+gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+gpg --verify SHA256SUMS.gpg SHA256SUMS
+grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
+success "Image is valid"
+
+if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
+  info "Decompressing image ..."
+  pv "$DOWNLOAD_FILE_NAME" | xz -d -T "$(nproc)" --stdout >"$UNCOMPRESSED_FILE_NAME"
+  success "Decompressed image successfully"
+fi
+
+TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY:-""}
+if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
+  info "Pulling Tailscale auth key from 1Password"
+  TAILSCALE_AUTH_KEY=$(op read 'op://Private/siw7aqr3rr32eeiewfjphdkn7q/password' | tr -d '\n')
+  if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
+    error "Failed to read TAILSCALE_AUTH_KEY from 1Password"
+    exit 1
+  fi
+fi
+
+info "Getting sudo access"
+sudo true
+
+DISK=${DISK:-""}
+if [[ -z "$DISK" ]]; then
+  DISK="$(diskutil list | grep -v "disk0" | grep -A6 "(internal, physical)" | head -n1 | awk '{ print $1 }' | sed 's_/dev/__')"
+  if [[ -z "$DISK" ]]; then
+    error "Failed to find a disk, supply it with the DISK environment variable"
+    exit 1
+  fi
+fi
+
+info "Going to flash '$DISK' (r$DISK) in 10s ... (^C to cancel)"
+diskutil list "$DISK"
+for i in {10..1}; do
+  echo -n "$i "
+  sleep 1
+done
+echo ""
+
+success "Flashing ..."
+sudo balena local flash --yes --drive /dev/"$DISK" "$UNCOMPRESSED_FILE_NAME"
+
+info "Setting up cloud-init ..."
+sudo diskutil mountDisk /dev/"$DISK"
+TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY \
+  envsubst <cloud-init.yaml >/Volumes/system-boot/user-data
+
+info "Ejecting disk ..."
 sudo diskutil umountDisk /dev/disk2
-sudo diskutil eject /dev/r"$disk"
+sudo diskutil eject /dev/r"$DISK"
+
+success "Successfully flashed disk $DISK"

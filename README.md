@@ -1,10 +1,10 @@
 # How to Use
 
+Only supports macOS at the moment.
+
 ## Raspberry Pi
 
-MacOS:
-
-Download the latest Ubuntu RPi image and save in the repo as `ubuntu.img`. Mount a SDCard (modify the script if >32GB). Run `sudo ./flash.sh`
+Run `flash.sh`.
 
 ## Supported Devices
 
