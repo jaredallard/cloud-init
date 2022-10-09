@@ -39,6 +39,8 @@ package_reboot_if_required: true
 
 # Install any additional apt packages you need here
 packages:
+  # RaspberryPI Kernel Modules
+  - linux-modules-extra-raspi
   # Time
   - fake-hwclock
   # Networking stuff
@@ -103,8 +105,10 @@ runcmd:
   # Default to deny all incoming traffic, allow all outgoing
   - "ufw default deny incoming"
   - "ufw default allow outgoing"
+  - "ufw default allow forward"
   # Allow all traffic over tailscale
   - "ufw allow in on tailscale0 to any"
+  - "ufw allow 41641/udp"
   # Enable ufw
   - "ufw enable"
 
@@ -112,7 +116,7 @@ runcmd:
   - [
       sh,
       -c,
-      'echo "net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline cgroup_enable=cpuset cgroup_enable=memory rootwait fixrtc" >/boot/firmware/cmdline.txt',
+      'echo "net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1 rootwait fixrtc" >/boot/firmware/cmdline.txt',
     ]
 
   # reboot
