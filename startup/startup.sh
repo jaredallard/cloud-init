@@ -93,5 +93,24 @@ sleep 60
 echo "Joining microk8s cluster..."
 microk8s join "$MICROK8S_LEADER_ADDRESS/$MICROK8S_TOKEN" --worker
 
+KUBECONFIG_FILE=$(doppler secrets get --plain KUBECONFIG_FILE)
+if [[ -z "$KUBECONFIG_FILE" ]]; then
+  echo "Error: KUBECONFIG_FILE not set, cannot continue" >&2
+  exit 1
+fi
+
+kubeconfig=$(mktemp)
+trap 'rm -f $kubeconfig' EXIT
+base64 -d <<<"$KUBECONFIG_FILE" >"$kubeconfig"
+
+echo "Waiting for node to be registered in Kubernetes..."
+while ! kubectl --kubeconfig "$kubeconfig" get node "$(hostname)" >/dev/null 2>&1; do
+  sleep 1
+done
+
+echo "Applying node labels and taints..."
+kubectl --kubeconfig "$kubeconfig" label node "$(hostname)" rgst.io/cloud=gcp
+kubectl --kubeconfig "$kubeconfig" taint node "$(hostname)" rgst.io/cloud=true:NoSchedule
+
 echo "Finished at $(date)"
 touch "$CONFIG_DIR/startup-ran"
