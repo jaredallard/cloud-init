@@ -25,6 +25,11 @@ if ! command -v microk8s >/dev/null; then
   snap install microk8s --classic
 fi
 
+if ! command -v kubectl >/dev/null; then
+  echo "Installing kubectl..."
+  snap install kubectl --classic
+fi
+
 if ! command -v doppler >/dev/null; then
   echo "Installing doppler..."
   apt-get update && sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
