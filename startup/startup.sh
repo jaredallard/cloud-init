@@ -3,6 +3,9 @@
 # starts microk8s.
 set -e
 
+# HOME is required to be set by doppler, so here we are.
+export HOME=/root
+
 CONFIG_DIR="/etc/rgst"
 
 if [[ -e "$CONFIG_DIR/startup-ran" ]]; then
