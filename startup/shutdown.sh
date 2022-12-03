@@ -9,7 +9,7 @@ if [[ -z "$KUBECONFIG_FILE" ]]; then
 fi
 
 tmpFile=$(mktemp)
-cat >"$tmpFile" <<<"$(base64 -d <<<"$KUBECONFIG_FILE")"
+base64 -d <<<"$KUBECONFIG_FILE" >"$tmpFile"
 
 kubectl --kubeconfig "$tmpFile" delete node "$(hostname)"
 tailscale logout
