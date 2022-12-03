@@ -35,9 +35,11 @@ if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
 fi
 
 echo "Setting up Tailscale..."
-curl -fsSL https://tailscale.com/install.sh | bash
-sudo apt-get update
-sudo apt-get install tailscale
+if ! command -v tailscale >/dev/null; then
+  curl -fsSL https://tailscale.com/install.sh | bash
+  sudo apt-get update
+  sudo apt-get install tailscale
+fi
 tailscale up --auth-key="${TAILSCALE_AUTH_KEY}"
 
 MICROK8S_TOKEN=$(doppler secrets get --plain MICROK8S_TOKEN)
