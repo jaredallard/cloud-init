@@ -11,4 +11,5 @@ export DOPPLER_TOKEN
 # This should be a raw URL to the script.
 STARTUP_SCRIPT_URL="https://raw.githubusercontent.com/rgst-io/cloud-init/main/startup/startup.sh"
 
+echo "Fetching latest start script from '${STARTUP_SCRIPT_URL}' and executing"
 curl -sSL "${STARTUP_SCRIPT_URL}" | bash
