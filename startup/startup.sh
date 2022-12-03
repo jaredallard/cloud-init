@@ -77,7 +77,7 @@ fi
 # if the worker user exists.
 if id -u worker >/dev/null 2>&1; then
   usermod -a -G microk8s worker
-  chown -f -R worker "/home/worker/.kube"
+  chown -f -R worker "/home/worker/.kube" || true
 fi
 
 # We have a script that updates /etc/host on the leader
