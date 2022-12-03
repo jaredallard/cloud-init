@@ -59,8 +59,12 @@ fi
 echo "Configuring microk8s..."
 TAILSCALE_IP=$(tailscale ip | grep 100 | head -n1)
 echo " -> tailscale ip: $TAILSCALE_IP"
-sudo sed -i "1s/^/# tailscale0\n--node-ip=${TAILSCALE_IP}\n\n/" /var/snap/microk8s/current/args/kubelet
-sudo sed -i "1s/^/# tailscale0\n--bind-address=${TAILSCALE_IP}\n\n/" /var/snap/microk8s/current/args/kube-proxy
+if ! grep -q "tailscale0" /var/snap/microk8s/current/args/kubelet; then
+  sudo sed -i "1s/^/# tailscale0\n--node-ip=${TAILSCALE_IP}\n\n/" /var/snap/microk8s/current/args/kubelet
+fi
+if ! grep -q "tailscale0" /var/snap/microk8s/current/args/kube-proxy; then
+  sudo sed -i "1s/^/# tailscale0\n--bind-address=${TAILSCALE_IP}\n\n/" /var/snap/microk8s/current/args/kube-proxy
+fi
 
 echo "Joining microk8s cluster..."
 microk8s join "$MICROK8S_LEADER_ADDRESS/$MICROK8S_TOKEN" --worker
