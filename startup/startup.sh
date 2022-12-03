@@ -90,7 +90,7 @@ if ! grep -q "gcp" /var/snap/microk8s/current/args/kube-apiserver; then
   sed -i "1s/^/# gcp\n--cloud-provider=gce\n\n/" /var/snap/microk8s/current/args/kube-apiserver
 fi
 if ! grep -q "gcp" /var/snap/microk8s/current/args/kubelet; then
-  sed -i "1s/^/# gcp\n--cloud-provider=gce\n--provider-id=$providerID\n\n/" /var/snap/microk8s/current/args/kubelet
+  sed -i "1s|^|# gcp\n--cloud-provider=gce\n--provider-id=$providerID\n\n|" /var/snap/microk8s/current/args/kubelet
 fi
 if ! grep -q "gcp" /var/snap/microk8s/current/args/kube-controller-manager; then
   sed -i "1s/^/# gcp\n--cloud-provider=gce\n\n/" /var/snap/microk8s/current/args/kube-controller-manager
