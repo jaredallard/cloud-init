@@ -25,8 +25,20 @@ fi
 if ! command -v doppler >/dev/null; then
   echo "Installing doppler..."
   sudo apt install -y curl gnupg
-  curl -sSL https://cli.doppler.com/install.sh | sh
+  curl -sSL https://cli.doppler.com/install.sh | bash
 fi
+
+TAILSCALE_AUTH_KEY="$(doppler secrets get TAILSCALE_AUTH_KEY)"
+if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
+  echo "Error: TAILSCALE_AUTH_KEY not set, cannot continue" >&2
+  exit 1
+fi
+
+echo "Setting up Tailscale..."
+curl -fsSL https://tailscale.com/install.sh | bash
+sudo apt-get update
+sudo apt-get install tailscale
+tailscale up --auth-key="${TAILSCALE_AUTH_KEY}"
 
 MICROK8S_TOKEN=$(doppler secrets get --plain MICROK8S_TOKEN)
 if [[ -z "$MICROK8S_TOKEN" ]]; then
