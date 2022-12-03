@@ -20,6 +20,9 @@ fi
 
 mkdir -p "$CONFIG_DIR"
 
+echo "Installing the GCP Ops Agent"
+curl -fsSl https://dl.google.com/cloudagents/add-google-cloud-ops-agent-repo.sh | bash --also-install
+
 if ! command -v microk8s >/dev/null; then
   echo "Installing microk8s..."
   snap install microk8s --classic
