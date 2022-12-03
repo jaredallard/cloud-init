@@ -80,6 +80,23 @@ if ! grep -q "tailscale0" /var/snap/microk8s/current/args/kube-proxy; then
   sed -i "1s/^/# tailscale0\n--bind-address=${TAILSCALE_IP}\n\n/" /var/snap/microk8s/current/args/kube-proxy
 fi
 
+## GCP SPECIFIC HERE ##
+echo " -> Configuring GCP Support"
+projectID="$(curl --retry 3 -s -w "\n" -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/project/project-id)"
+region="$(curl --retry 3 -s -w "\n" -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/zone | cut -d/ -f4)"
+providerID="gce://$projectID/$region/$(hostname)"
+echo "  ...> Provider ID: $providerID"
+if ! grep -q "gcp" /var/snap/microk8s/current/args/kube-apiserver; then
+  sed -i "1s/^/# gcp\n--cloud-provider=gce\n\n/" /var/snap/microk8s/current/args/kube-apiserver
+fi
+if ! grep -q "gcp" /var/snap/microk8s/current/args/kubelet; then
+  sed -i "1s/^/# gcp\n--cloud-provider=gce\n--provider-id=$providerID\n\n/" /var/snap/microk8s/current/args/kubelet
+fi
+if ! grep -q "gcp" /var/snap/microk8s/current/args/kube-controller-manager; then
+  sed -i "1s/^/# gcp\n--cloud-provider=gce\n\n/" /var/snap/microk8s/current/args/kube-controller-manager
+fi
+##
+
 # Ensure that a "worker" user has access to run
 # microk8s commands for manual debugging, but only
 # if the worker user exists.
@@ -114,6 +131,7 @@ done
 echo "Applying node labels and taints..."
 kubectl --kubeconfig "$kubeconfig" label node "$(hostname)" rgst.io/cloud=gcp
 kubectl --kubeconfig "$kubeconfig" taint node "$(hostname)" rgst.io/cloud=true:NoSchedule
+kubectl --kubeconfig "$kubeconfig" patch node "$(hostname)" --patch '{"spec":{"providerID":"'"$providerID"'"}}'
 
 echo "Finished at $(date)"
 touch "$CONFIG_DIR/startup-ran"
