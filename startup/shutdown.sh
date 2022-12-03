@@ -13,3 +13,5 @@ cat >"$tmpFile" <<<"$KUBECONFIG_FILE"
 
 kubectl --kubeconfig "$tmpFile" delete node "$(hostname)"
 tailscale logout
+
+rm -rf "/etc/rgst/startup-ran"
