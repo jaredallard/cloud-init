@@ -28,7 +28,7 @@ if ! command -v doppler >/dev/null; then
   curl -sSL https://cli.doppler.com/install.sh | bash
 fi
 
-TAILSCALE_AUTH_KEY="$(doppler secrets get TAILSCALE_AUTH_KEY)"
+TAILSCALE_AUTH_KEY="$(doppler secrets get --plain TAILSCALE_AUTH_KEY)"
 if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
   echo "Error: TAILSCALE_AUTH_KEY not set, cannot continue" >&2
   exit 1
