@@ -12,4 +12,4 @@ export DOPPLER_TOKEN
 SCRIPT_SCRIPT_URL="https://raw.githubusercontent.com/rgst-io/cloud-init/main/startup/{{ .Action }}.sh"
 
 echo "Fetching latest {{ .Action }} script from '${SCRIPT_SCRIPT_URL}' and executing"
-curl -sSL "${SCRIPT_SCRIPT_URL}" | bash
+curl --connect-timeout 3 --retry 10 --retry-delay 5 -sSL "${SCRIPT_SCRIPT_URL}" | bash
