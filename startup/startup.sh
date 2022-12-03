@@ -40,7 +40,9 @@ if ! command -v tailscale >/dev/null; then
   sudo apt-get update
   sudo apt-get install tailscale
 fi
-tailscale up --auth-key="${TAILSCALE_AUTH_KEY}"
+if ! tailscale status >/dev/null 2>&1; then
+  tailscale up --auth-key="${TAILSCALE_AUTH_KEY}"
+fi
 
 MICROK8S_TOKEN=$(doppler secrets get --plain MICROK8S_TOKEN)
 if [[ -z "$MICROK8S_TOKEN" ]]; then
