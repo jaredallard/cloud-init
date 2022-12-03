@@ -46,7 +46,7 @@ if [[ -z "$MICROK8S_TOKEN" ]]; then
   exit 1
 fi
 
-MICROK8S_LEADER_ADDRESS=$(doppler secrets get --plain MICROK8S_LEADER_IP)
+MICROK8S_LEADER_ADDRESS=$(doppler secrets get --plain MICROK8S_LEADER_ADDRESS)
 if [[ -z "$MICROK8S_LEADER_ADDRESS" ]]; then
   echo "Error: MICROK8S_LEADER_ADDRESS not set, cannot continue" >&2
   exit 1
