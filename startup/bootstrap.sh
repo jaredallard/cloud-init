@@ -5,6 +5,7 @@
 # DOPPLER_TOKEN is the token to use when accessing
 # Doppler's API.
 DOPPLER_TOKEN="{{ .DopplerToken }}"
+export DOPPLER_TOKEN
 
 # The URL to the latest version of the startup script.
 # This should be a raw URL to the script.
