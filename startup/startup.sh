@@ -131,7 +131,7 @@ done
 echo "Applying node labels and taints..."
 kubectl --kubeconfig "$kubeconfig" label node "$(hostname)" rgst.io/cloud=gcp
 kubectl --kubeconfig "$kubeconfig" taint node "$(hostname)" rgst.io/cloud=true:NoSchedule
-kubectl --kubeconfig "$kubeconfig" patch node "$(hostname)" --patch '{"spec":{"providerID":"'"$providerID"'"}}'
+#kubectl --kubeconfig "$kubeconfig" patch node "$(hostname)" --patch '{"spec":{"providerID":"'"$providerID"'"}}'
 
 echo "Finished at $(date)"
 touch "$CONFIG_DIR/startup-ran"
