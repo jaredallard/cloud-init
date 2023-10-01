@@ -2,7 +2,7 @@
 # Automatically provision a new node.
 set -e -o pipefail
 
-UBUNTU_VERSION="22.04.3"
+UBUNTU_VERSION="23.04"
 # https://keyserver.ubuntu.com/pks/lookup?search=843938DF228D22F7B3742BC0D94AA3F0EFE21092&fingerprint=on&op=index
 GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
@@ -70,7 +70,7 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
   info "Checking validity of image download ..."
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
-  #gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+  gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
   gpg --verify SHA256SUMS.gpg SHA256SUMS
   grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
   success "Image is valid"
