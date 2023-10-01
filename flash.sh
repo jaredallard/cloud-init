@@ -2,7 +2,7 @@
 # Automatically provision a new node.
 set -e -o pipefail
 
-UBUNTU_VERSION="22.04.1"
+UBUNTU_VERSION="22.04.3"
 # https://keyserver.ubuntu.com/pks/lookup?search=843938DF228D22F7B3742BC0D94AA3F0EFE21092&fingerprint=on&op=index
 GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
@@ -32,12 +32,32 @@ error() {
 
 if ! command -v aria2c >/dev/null; then
   if [[ "$OSTYPE" == "darwin"* ]]; then
-    info "Installing 'pv' via Homebrew..."
+    info "Installing 'aria2' via Homebrew..."
     brew install aria2
+  else
+    error "Please install aria2"
+    exit 1
+  fi
+fi
+
+if ! command -v pv >/dev/null; then
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    info "Installing 'pv' via Homebrew..."
+    brew install pv
   else
     error "Please install pv"
     exit 1
   fi
+fi
+
+if ! command -v balena >/dev/null; then
+  if ! command -v npm >/dev/null; then
+    error "Please install npm"
+    exit 1
+  fi
+
+  info "Installing 'balena-cli' via npm..."
+  npm install -g balena-cli
 fi
 
 if [[ ! -e "$DOWNLOAD_FILE_NAME" ]]; then
@@ -50,7 +70,7 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
   info "Checking validity of image download ..."
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
-  gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+  #gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
   gpg --verify SHA256SUMS.gpg SHA256SUMS
   grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
   success "Image is valid"
@@ -58,16 +78,6 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
   info "Decompressing image ..."
   pv "$DOWNLOAD_FILE_NAME" | xz -d -T "$(nproc)" --stdout >"$UNCOMPRESSED_FILE_NAME"
   success "Decompressed image successfully"
-fi
-
-TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY:-""}
-if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
-  info "Pulling Tailscale auth key from 1Password"
-  TAILSCALE_AUTH_KEY=$(op read 'op://Private/siw7aqr3rr32eeiewfjphdkn7q/password' | tr -d '\n')
-  if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
-    error "Failed to read TAILSCALE_AUTH_KEY from 1Password"
-    exit 1
-  fi
 fi
 
 info "Getting sudo access"
@@ -91,15 +101,15 @@ done
 echo ""
 
 success "Flashing ..."
+sudo diskutil umountDisk /dev/"$DISK" || true
 sudo balena local flash --yes --drive /dev/"$DISK" "$UNCOMPRESSED_FILE_NAME"
 
 info "Setting up cloud-init ..."
 sudo diskutil mountDisk /dev/"$DISK"
-TAILSCALE_AUTH_KEY=$TAILSCALE_AUTH_KEY \
-  envsubst <cloud-init.yaml >/Volumes/system-boot/user-data
+cp cloud-init.yaml /Volumes/system-boot/user-data
 
 info "Ejecting disk ..."
-sudo diskutil umountDisk /dev/disk2
+sudo diskutil umountDisk /dev/"$DISK"
 sudo diskutil eject /dev/r"$DISK"
 
 success "Successfully flashed disk $DISK"
