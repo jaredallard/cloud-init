@@ -1,8 +1,22 @@
 #!/usr/bin/env bash
-# Automatically provision a new node.
+# Copyright (C) 2024 Jared Allard <jaredallard@users.noreply.github.com>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 set -e -o pipefail
 
-UBUNTU_VERSION="23.04"
+UBUNTU_VERSION="23.10"
 # https://keyserver.ubuntu.com/pks/lookup?search=843938DF228D22F7B3742BC0D94AA3F0EFE21092&fingerprint=on&op=index
 GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
@@ -50,14 +64,19 @@ if ! command -v pv >/dev/null; then
   fi
 fi
 
-if ! command -v balena >/dev/null; then
-  if ! command -v npm >/dev/null; then
-    error "Please install npm"
+if ! command -v gpg >/dev/null; then
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    info "Installing 'gpg' via Homebrew..."
+    brew install gpg
+  else
+    error "Please install gpg"
     exit 1
   fi
+fi
 
-  info "Installing 'balena-cli' via npm..."
-  npm install -g balena-cli
+if ! command -v balena >/dev/null; then
+  error "Please ensure asdf or mise is installed and have ran the relevant setup"
+  exit 1
 fi
 
 if [[ ! -e "$DOWNLOAD_FILE_NAME" ]]; then
@@ -79,6 +98,22 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
   pv "$DOWNLOAD_FILE_NAME" | xz -d -T "$(nproc)" --stdout >"$UNCOMPRESSED_FILE_NAME"
   success "Decompressed image successfully"
 fi
+
+info "Ensuring valid 1Password CLI session"
+if ! op account get >/dev/null; then
+  error "Please login to 1Password CLI"
+  exit 1
+fi
+
+info "Rendering cloud-init ..."
+cloudInitTmpFile="$(mktemp)"
+trap 'rm -f "$cloudInitTmpFile"' EXIT
+
+# HACK: There's a better way to do this with JQ... I just haven't tried
+# hard enough yet.
+export PUBLIC_SSH_KEY=$(op item list --tags current-rgst-ssh-key --format json | op item get - --format json | jq -r '(.fields[] | select(.id == "public_key").value), .title' | tr '\n' ' ' | sed 's/ $//')
+
+go run github.com/hairyhenderson/gomplate/v4/cmd/gomplate@latest -f cloud-init.yaml -o "$cloudInitTmpFile"
 
 info "Getting sudo access"
 sudo true
@@ -106,7 +141,8 @@ sudo balena local flash --yes --drive /dev/"$DISK" "$UNCOMPRESSED_FILE_NAME"
 
 info "Setting up cloud-init ..."
 sudo diskutil mountDisk /dev/"$DISK"
-cp cloud-init.yaml /Volumes/system-boot/user-data
+
+cp -v "$cloudInitTmpFile" /Volumes/system-boot/user-data
 
 info "Ejecting disk ..."
 sudo diskutil umountDisk /dev/"$DISK"

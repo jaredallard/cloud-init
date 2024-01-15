@@ -17,7 +17,7 @@ users:
     shell: /bin/bash
     groups: users,video,input
     ssh_authorized_keys:
-      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBftywIwPynMROLJ63NAeB792zBphnlMHzjKUmP+js4I id_rgst 02/07/2022
+      - "{{ .Env.PUBLIC_SSH_KEY }}"
 
 # Set the locale of the system
 locale: "en_US.UTF-8"
@@ -95,5 +95,3 @@ runcmd:
       -c,
       'echo "console=serial0,115200 dwc_otg.lpm_enable=0 console=tty1 root=LABEL=writable rootfstype=ext4 rootwait fixrtc quiet splash cgroup_enable=memory cgroup_memory=1 systemd.unified_cgroup_hierarchy=0" >/boot/firmware/cmdline.txt',
     ]
-
-  - reboot
