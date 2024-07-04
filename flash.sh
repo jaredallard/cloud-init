@@ -16,7 +16,7 @@
 
 set -e -o pipefail
 
-UBUNTU_VERSION="23.10"
+UBUNTU_VERSION="24.04"
 # https://keyserver.ubuntu.com/pks/lookup?search=843938DF228D22F7B3742BC0D94AA3F0EFE21092&fingerprint=on&op=index
 GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
@@ -28,6 +28,7 @@ UNCOMPRESSED_FILE_NAME="${DOWNLOAD_FILE_NAME%.*}"
 out() {
   color="${1:-"36"}"
   prefix="${2:-">"}"
+  shift
   shift
   echo -e " \033[${color}m${prefix}\033[0m\033[1m " "$@" "\033[0m"
 }
@@ -89,7 +90,12 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
   info "Checking validity of image download ..."
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS" -o SHA256SUMS
   curl --silent -L "$DOWNLOAD_BASE/SHA256SUMS.gpg" -o SHA256SUMS.gpg
-  gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+
+  if ! gpg --list-keys "$GPG_KEY" >/dev/null; then
+    info "Fetching GPG key ..."
+    gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+  fi
+
   gpg --verify SHA256SUMS.gpg SHA256SUMS
   grep "$DOWNLOAD_FILE_NAME" SHA256SUMS | sha256sum -c
   success "Image is valid"
@@ -113,14 +119,14 @@ trap 'rm -f "$cloudInitTmpFile"' EXIT
 # hard enough yet.
 export PUBLIC_SSH_KEY=$(op item list --tags current-rgst-ssh-key --format json | op item get - --format json | jq -r '(.fields[] | select(.id == "public_key").value), .title' | tr '\n' ' ' | sed 's/ $//')
 
-go run github.com/hairyhenderson/gomplate/v4/cmd/gomplate@latest -f cloud-init.yaml -o "$cloudInitTmpFile"
+go run github.com/hairyhenderson/gomplate/v4/cmd/gomplate@v4.0.0-pre-1 -f cloud-init.yaml -o "$cloudInitTmpFile"
 
 info "Getting sudo access"
 sudo true
 
 DISK=${DISK:-""}
 if [[ -z "$DISK" ]]; then
-  DISK="$(diskutil list | grep -v "disk0" | grep "physical" | head -n1 | awk '{ print $1 }' | sed 's_/dev/__')"
+  DISK="$(diskutil list | grep -v "disk0" | grep "physical" | head -n1 | awk '{ print $1 }' | sed 's_/dev/__' || true)"
   if [[ -z "$DISK" ]]; then
     error "Failed to find a disk, supply it with the DISK environment variable"
     exit 1

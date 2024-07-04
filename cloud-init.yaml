@@ -1,5 +1,5 @@
 #cloud-config
-# yaml-language-server: $schema=https://raw.githubusercontent.com/canonical/cloud-init/main/cloudinit/config/schemas/schema-cloud-config-v1.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/canonical/cloud-init/main/cloudinit/config/schemas/versions.schema.cloud-config.json
 # vim: syntax=yaml
 
 network:
@@ -39,8 +39,6 @@ packages:
   # Networking stuff
   - resolvconf
   - ifupdown
-  # Get more entropy
-  - haveged
   # Bye bye hackers.
   - fail2ban
   # For DNS at home
