@@ -21,7 +21,7 @@ UBUNTU_VERSION="24.04"
 GPG_KEY="843938DF228D22F7B3742BC0D94AA3F0EFE21092"
 
 DOWNLOAD_BASE="https://cdimage.ubuntu.com/releases/${UBUNTU_VERSION}/release"
-DOWNLOAD_FILE_NAME="ubuntu-${UBUNTU_VERSION}-preinstalled-server-arm64+raspi.img.xz"
+DOWNLOAD_FILE_NAME="ubuntu-${UBUNTU_VERSION}.1-preinstalled-server-arm64+raspi.img.xz"
 DOWNLOAD_URL="${DOWNLOAD_BASE}/${DOWNLOAD_FILE_NAME}"
 UNCOMPRESSED_FILE_NAME="${DOWNLOAD_FILE_NAME%.*}"
 
@@ -76,8 +76,13 @@ if ! command -v gpg >/dev/null; then
 fi
 
 if ! command -v balena >/dev/null; then
-  error "Please ensure asdf or mise is installed and have ran the relevant setup"
-  exit 1
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    info "Installing 'balena-cli' via Homebrew..."
+    brew install balena-cli
+  else
+    error "Please install balena-cli"
+    exit 1
+  fi
 fi
 
 if [[ ! -e "$DOWNLOAD_FILE_NAME" ]]; then
@@ -93,7 +98,8 @@ if [[ ! -e "$UNCOMPRESSED_FILE_NAME" ]]; then
 
   if ! gpg --list-keys "$GPG_KEY" >/dev/null; then
     info "Fetching GPG key ..."
-    gpg --keyserver keyserver.ubuntu.com --recv-keys "$GPG_KEY"
+    # Force IPv4 for ubuntu (I don't have IPv6, thanks CenturyLink)
+    gpg --keyserver "$(host keyserver.ubuntu.com | grep -oE "\b([0-9]{1,3}\.){3}[0-9]{1,3}\b" | head -1)" --recv-keys "$GPG_KEY"
   fi
 
   gpg --verify SHA256SUMS.gpg SHA256SUMS
@@ -119,7 +125,7 @@ trap 'rm -f "$cloudInitTmpFile"' EXIT
 # hard enough yet.
 export PUBLIC_SSH_KEY=$(op item list --tags current-rgst-ssh-key --format json | op item get - --format json | jq -r '(.fields[] | select(.id == "public_key").value), .title' | tr '\n' ' ' | sed 's/ $//')
 
-go run github.com/hairyhenderson/gomplate/v4/cmd/gomplate@v4.0.0-pre-1 -f cloud-init.yaml -o "$cloudInitTmpFile"
+go run github.com/hairyhenderson/gomplate/v4/cmd/gomplate@v4.3.0 -f cloud-init.yaml -o "$cloudInitTmpFile"
 
 info "Getting sudo access"
 sudo true
@@ -143,7 +149,7 @@ echo ""
 
 success "Flashing ..."
 sudo diskutil umountDisk /dev/"$DISK" || true
-sudo balena local flash --yes --drive /dev/"$DISK" "$UNCOMPRESSED_FILE_NAME"
+sudo balena --debug local flash --yes --drive /dev/"$DISK" "$UNCOMPRESSED_FILE_NAME"
 
 info "Setting up cloud-init ..."
 sudo diskutil mountDisk /dev/"$DISK"
